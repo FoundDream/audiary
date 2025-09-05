@@ -111,15 +111,6 @@ body {
   animation: lyricsChange 0.5s ease-out 0.1s both;
 }
 
-/* 按钮悬停效果增强 */
-button:hover {
-  transform: scale(1.1);
-}
-
-button:active {
-  transform: scale(0.95);
-}
-
 /* 进度条动画 */
 .progress-bar {
   transition: width 0.1s ease-out;

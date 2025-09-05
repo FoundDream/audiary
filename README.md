@@ -27,11 +27,17 @@ pnpm run dev
 npm run build
 ```
 
-## lint
+### lint
 
 ```bash
 pnpm run lint
 ```
+
+## Features
+
+- a modern interface design
+- dynamic background colors
+- download music from netease music
 
 ## 📝 License
 
