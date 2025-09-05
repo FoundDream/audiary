@@ -1,9 +1,7 @@
 import axios from 'axios';
 import bigInt from 'big-integer';
 import CryptoJS from 'crypto-js';
-import fs from 'fs';
 import { NextRequest, NextResponse } from 'next/server';
-import path from 'path';
 
 // 网易云音乐加密参数
 const pubKey = '010001';
@@ -41,7 +39,7 @@ function rsaEncrypt(secKey: string): string {
   return biRet.toString(16).padStart(256, '0');
 }
 
-function weapi(data: any) {
+function weapi(data: Record<string, unknown>) {
   const text = JSON.stringify(data);
   const secKey = randomString(16);
   const encText = aesEncrypt(aesEncrypt(text, nonce), secKey);
@@ -81,7 +79,7 @@ async function getSongDetail(songId: number) {
     return {
       id: song.id,
       name: song.name,
-      artist: song.ar.map((a: any) => a.name).join(' & '),
+      artist: song.ar.map((a: { name: string }) => a.name).join(' & '),
       album: song.al.name,
       coverUrl: song.al.picUrl,
       duration: song.dt,
@@ -147,112 +145,98 @@ async function getLyric(songId: number) {
   return res.data;
 }
 
-// 下载文件
-async function downloadFile(url: string, filePath: string): Promise<number> {
+// 下载文件并返回Buffer
+async function downloadFileToBuffer(url: string): Promise<Buffer> {
   const response = await axios({
     method: 'GET',
     url: url,
-    responseType: 'stream',
+    responseType: 'arraybuffer',
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       Referer: 'https://music.163.com/',
     },
   });
 
-  // 确保目录存在
-  const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
-  const writer = fs.createWriteStream(filePath);
-  response.data.pipe(writer);
-
-  return new Promise((resolve, reject) => {
-    writer.on('finish', () => {
-      const stats = fs.statSync(filePath);
-      resolve(stats.size);
-    });
-    writer.on('error', reject);
-  });
+  return Buffer.from(response.data);
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { songId, options, quality } = await request.json();
+    const { songId, type, quality } = await request.json();
 
     if (!songId || typeof songId !== 'number') {
       return NextResponse.json({ error: '无效的歌曲ID' }, { status: 400 });
+    }
+
+    if (!type || !['song', 'cover', 'lyrics'].includes(type)) {
+      return NextResponse.json({ error: '无效的下载类型' }, { status: 400 });
     }
 
     // 获取歌曲详情
     const songDetail = await getSongDetail(songId);
     const safeFileName = generateSafeFileName(songDetail.name, songDetail.artist);
 
-    const results: any = {};
+    switch (type) {
+      case 'song': {
+        try {
+          const songUrlData = await getSongUrl(songId, quality || 320000);
+          const fileBuffer = await downloadFileToBuffer(songUrlData.url);
+          const fileName = `${safeFileName}.${songUrlData.type}`;
 
-    // 下载歌曲
-    if (options.song) {
-      try {
-        const songUrlData = await getSongUrl(songId, quality);
-        const songPath = path.join(
-          process.cwd(),
-          'public',
-          'downloads',
-          'songs',
-          `${safeFileName}.${songUrlData.type}`,
-        );
-        const size = await downloadFile(songUrlData.url, songPath);
-
-        results.song = {
-          filePath: `/downloads/songs/${safeFileName}.${songUrlData.type}`,
-          size: size,
-          br: songUrlData.br,
-        };
-      } catch (error) {
-        console.error('下载歌曲失败:', error);
-        throw new Error('下载歌曲失败');
+          return new NextResponse(fileBuffer, {
+            headers: {
+              'Content-Type': 'audio/mpeg',
+              'Content-Disposition': `attachment; filename="${encodeURIComponent(fileName)}"`,
+              'Content-Length': fileBuffer.length.toString(),
+            },
+          });
+        } catch (error) {
+          console.error('下载歌曲失败:', error);
+          return NextResponse.json({ error: '下载歌曲失败' }, { status: 500 });
+        }
       }
-    }
 
-    // 下载封面
-    if (options.cover) {
-      try {
-        const coverPath = path.join(
-          process.cwd(),
-          'public',
-          'downloads',
-          'covers',
-          `${safeFileName}.jpg`,
-        );
-        await downloadFile(songDetail.coverUrl, coverPath);
+      case 'cover': {
+        try {
+          const fileBuffer = await downloadFileToBuffer(songDetail.coverUrl);
+          const fileName = `${safeFileName}.jpg`;
 
-        results.cover = {
-          filePath: `/downloads/covers/${safeFileName}.jpg`,
-        };
-      } catch (error) {
-        console.error('下载封面失败:', error);
-        throw new Error('下载封面失败');
+          return new NextResponse(fileBuffer, {
+            headers: {
+              'Content-Type': 'image/jpeg',
+              'Content-Disposition': `attachment; filename="${encodeURIComponent(fileName)}"`,
+              'Content-Length': fileBuffer.length.toString(),
+            },
+          });
+        } catch (error) {
+          console.error('下载封面失败:', error);
+          return NextResponse.json({ error: '下载封面失败' }, { status: 500 });
+        }
       }
-    }
 
-    // 获取歌词
-    if (options.lyrics) {
-      try {
-        const lyricData = await getLyric(songId);
-        results.lyrics = {
-          content: lyricData,
-        };
-      } catch (error) {
-        console.error('获取歌词失败:', error);
-        throw new Error('获取歌词失败');
+      case 'lyrics': {
+        try {
+          const lyricData = await getLyric(songId);
+          const lyricsContent = JSON.stringify(lyricData, null, 2);
+          const fileName = `${safeFileName}_lyrics.json`;
+          const buffer = Buffer.from(lyricsContent, 'utf-8');
+
+          return new NextResponse(buffer, {
+            headers: {
+              'Content-Type': 'application/json',
+              'Content-Disposition': `attachment; filename="${encodeURIComponent(fileName)}"`,
+              'Content-Length': buffer.length.toString(),
+            },
+          });
+        } catch (error) {
+          console.error('获取歌词失败:', error);
+          return NextResponse.json({ error: '获取歌词失败' }, { status: 500 });
+        }
       }
-    }
 
-    return NextResponse.json({
-      songDetail,
-      results,
-    });
+      default:
+        return NextResponse.json({ error: '不支持的下载类型' }, { status: 400 });
+    }
   } catch (error) {
     console.error('Download API error:', error);
     return NextResponse.json(

@@ -9,7 +9,6 @@ import {
   Music,
   X,
 } from 'lucide-react';
-import Image from 'next/image';
 import { useState } from 'react';
 
 interface DownloadMusicModalProps {
@@ -37,9 +36,9 @@ interface DownloadProgress {
 interface DownloadResult {
   songDetail: SongDetail;
   results: {
-    song?: { filePath: string; size: number; br: number };
-    cover?: { filePath: string };
-    lyrics?: { content: string };
+    song?: { fileName: string };
+    cover?: { fileName: string };
+    lyrics?: { fileName: string };
   };
 }
 
@@ -152,6 +151,43 @@ export default function DownloadMusicModal({ isOpen, onClose }: DownloadMusicMod
     }
   };
 
+  // 下载单个文件
+  const downloadFile = async (type: 'song' | 'cover' | 'lyrics', fileName: string) => {
+    try {
+      const response = await fetch('/api/music/download', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          songId: songDetail!.id,
+          type,
+          quality: type === 'song' ? quality : undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`下载${fileName}失败`);
+      }
+
+      // 创建下载链接
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      return true;
+    } catch (error) {
+      console.error(`下载${fileName}失败:`, error);
+      throw error;
+    }
+  };
+
   // 开始下载
   const handleDownload = async () => {
     if (!songDetail) return;
@@ -173,43 +209,77 @@ export default function DownloadMusicModal({ isOpen, onClose }: DownloadMusicMod
     }
     setDownloadProgress(progressItems);
 
-    try {
-      // 调用后端API开始下载
-      const response = await fetch('/api/music/download', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          songId: songDetail.id,
-          options: selectedOptions,
-          quality,
-        }),
-      });
+    const results: any = {};
+    let hasError = false;
 
-      if (!response.ok) {
-        throw new Error('下载失败');
+    // 依次下载每个文件
+    for (const item of progressItems) {
+      try {
+        // 更新状态为下载中
+        setDownloadProgress((prev) =>
+          prev.map((p) =>
+            p.type === item.type
+              ? { ...p, status: 'downloading' as const, progress: 50 }
+              : p,
+          ),
+        );
+
+        let fileName = '';
+        const safeFileName = `${songDetail.name}_${songDetail.artist}`
+          .replace(/[^\w\s-]/g, '')
+          .replace(/\s+/g, '_')
+          .substring(0, 50);
+
+        switch (item.type) {
+          case 'song':
+            fileName = `${safeFileName}.mp3`;
+            break;
+          case 'cover':
+            fileName = `${safeFileName}.jpg`;
+            break;
+          case 'lyrics':
+            fileName = `${safeFileName}_lyrics.json`;
+            break;
+        }
+
+        await downloadFile(item.type, fileName);
+
+        // 更新状态为完成
+        setDownloadProgress((prev) =>
+          prev.map((p) =>
+            p.type === item.type
+              ? { ...p, status: 'completed' as const, progress: 100, fileName }
+              : p,
+          ),
+        );
+
+        results[item.type] = { fileName };
+      } catch (err) {
+        hasError = true;
+        const errorMessage = err instanceof Error ? err.message : '下载失败';
+
+        // 更新状态为错误
+        setDownloadProgress((prev) =>
+          prev.map((p) =>
+            p.type === item.type
+              ? { ...p, status: 'error' as const, error: errorMessage }
+              : p,
+          ),
+        );
       }
-
-      // 这里可以使用 Server-Sent Events 或 WebSocket 来实时更新进度
-      // 简化版本：直接获取结果
-      const result = await response.json();
-      setDownloadResult(result);
-
-      // 更新所有项目为完成状态
-      setDownloadProgress((prev) =>
-        prev.map((item) => ({ ...item, progress: 100, status: 'completed' as const })),
-      );
-
-      setStep('completed');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '下载失败');
-      setDownloadProgress((prev) =>
-        prev.map((item) => ({ ...item, status: 'error' as const, error: '下载失败' })),
-      );
-    } finally {
-      setIsLoading(false);
     }
+
+    if (!hasError) {
+      setDownloadResult({
+        songDetail,
+        results,
+      });
+      setStep('completed');
+    } else {
+      setError('部分文件下载失败，请重试');
+    }
+
+    setIsLoading(false);
   };
 
   // 处理选项变更
@@ -341,7 +411,7 @@ export default function DownloadMusicModal({ isOpen, onClose }: DownloadMusicMod
             <div className="space-y-2">
               {/* Song Info */}
               <div className="flex items-center gap-4">
-                <Image
+                <img
                   src={songDetail.coverUrl}
                   alt={songDetail.name}
                   className="w-16 h-16 object-cover"
@@ -455,8 +525,7 @@ export default function DownloadMusicModal({ isOpen, onClose }: DownloadMusicMod
                     <div className="flex-1">
                       <p className="text-sm font-medium text-green-800">Song File</p>
                       <p className="text-xs text-green-600">
-                        {downloadResult.results.song.filePath} (
-                        {(downloadResult.results.song.size / 1024 / 1024).toFixed(2)}MB)
+                        {downloadResult.results.song.fileName} - Downloaded to your device
                       </p>
                     </div>
                   </div>
@@ -468,7 +537,8 @@ export default function DownloadMusicModal({ isOpen, onClose }: DownloadMusicMod
                     <div className="flex-1">
                       <p className="text-sm font-medium text-green-800">Album Cover</p>
                       <p className="text-xs text-green-600">
-                        {downloadResult.results.cover.filePath}
+                        {downloadResult.results.cover.fileName} - Downloaded to your
+                        device
                       </p>
                     </div>
                   </div>
@@ -479,7 +549,10 @@ export default function DownloadMusicModal({ isOpen, onClose }: DownloadMusicMod
                     <FileText className="w-4 h-4 text-green-600" />
                     <div className="flex-1">
                       <p className="text-sm font-medium text-green-800">Lyrics File</p>
-                      <p className="text-xs text-green-600">Lyrics Content</p>
+                      <p className="text-xs text-green-600">
+                        {downloadResult.results.lyrics.fileName} - Downloaded to your
+                        device
+                      </p>
                     </div>
                   </div>
                 )}
