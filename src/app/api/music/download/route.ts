@@ -164,11 +164,15 @@ export async function POST(request: NextRequest) {
   try {
     const { songId, type, quality } = await request.json();
 
+    console.log('Download API called:', { songId, type, quality });
+
     if (!songId || typeof songId !== 'number') {
+      console.log('Invalid songId:', songId);
       return NextResponse.json({ error: '无效的歌曲ID' }, { status: 400 });
     }
 
     if (!type || !['song', 'cover', 'lyrics'].includes(type)) {
+      console.log('Invalid type:', type);
       return NextResponse.json({ error: '无效的下载类型' }, { status: 400 });
     }
 
@@ -179,9 +183,16 @@ export async function POST(request: NextRequest) {
     switch (type) {
       case 'song': {
         try {
+          console.log('Getting song URL for songId:', songId, 'quality:', quality);
           const songUrlData = await getSongUrl(songId, quality || 320000);
+          console.log('Got song URL:', songUrlData.url, 'size:', songUrlData.size);
+
+          console.log('Downloading file buffer...');
           const fileBuffer = await downloadFileToBuffer(songUrlData.url);
+          console.log('Downloaded buffer size:', fileBuffer.length);
+
           const fileName = `${safeFileName}.${songUrlData.type}`;
+          console.log('Returning file:', fileName);
 
           return new NextResponse(fileBuffer as BodyInit, {
             headers: {
@@ -192,7 +203,13 @@ export async function POST(request: NextRequest) {
           });
         } catch (error) {
           console.error('下载歌曲失败:', error);
-          return NextResponse.json({ error: '下载歌曲失败' }, { status: 500 });
+          return NextResponse.json(
+            {
+              error: '下载歌曲失败',
+              details: error instanceof Error ? error.message : String(error),
+            },
+            { status: 500 },
+          );
         }
       }
 
