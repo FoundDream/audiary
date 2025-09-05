@@ -1,6 +1,16 @@
 # 🎶 Audiray
 
-A modern music collection website that organizes music files in album mode. It features a modern interface design, dynamic background colors, real-time lyrics display, and smooth animation effects.
+A modern music collection website that organizes music files in album mode. It features a modern interface design, dynamic background colors, real-time lyrics display, and smooth animation effects.\
+
+> [!NOTE]
+>
+> **🚀 v1.0 Coming Soon!** I will bring many awesome new features:
+>
+> - 🎨 **AI Dynamic Cover** - Use AI to generate dynamic cover images
+> - 🎵 **Lyrics Card Generator** - Generate beautiful lyrics cards
+> - ❤️ **Easy Music Library** - Build your own music library in one step
+>
+> I will release the v1.0 version in the next few days, stay tuned!
 
 ## 🚀 quick start
 
@@ -44,5 +54,7 @@ pnpm run lint
 MIT License
 
 ## 🤝 Contribution
+
+Better Understanding This Repo: [DeepWiki](https://deepwiki.com/FoundDream/audiary)
 
 Contributions are welcome! Please submit an issue or pull request.

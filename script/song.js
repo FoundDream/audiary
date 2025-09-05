@@ -592,7 +592,7 @@ async function quickTest() {
     const songId = extractSongIdFromUrl(testUrl);
     console.log(`✅ 解析歌曲ID: ${songId}`);
 
-    const result = await downloadSongAndCover(songId);
+    await downloadSongAndCover(songId);
     console.log('✅ 测试完成!');
   } catch (error) {
     console.error('❌ 测试失败:', error.message);

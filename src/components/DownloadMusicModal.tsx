@@ -9,6 +9,7 @@ import {
   Music,
   X,
 } from 'lucide-react';
+import Image from 'next/image';
 import { useState } from 'react';
 
 interface DownloadMusicModalProps {
@@ -100,6 +101,7 @@ export default function DownloadMusicModal({ isOpen, onClose }: DownloadMusicMod
       const songId = url.searchParams.get('id');
       return songId ? parseInt(songId, 10) : null;
     } catch (error) {
+      console.error(error);
       const match = urlString.match(/[?&]id=(\d+)/);
       return match ? parseInt(match[1], 10) : null;
     }
@@ -339,7 +341,7 @@ export default function DownloadMusicModal({ isOpen, onClose }: DownloadMusicMod
             <div className="space-y-2">
               {/* Song Info */}
               <div className="flex items-center gap-4">
-                <img
+                <Image
                   src={songDetail.coverUrl}
                   alt={songDetail.name}
                   className="w-16 h-16 object-cover"
