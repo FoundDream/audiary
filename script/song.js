@@ -3,6 +3,12 @@ import bigInt from 'big-integer';
 import CryptoJS from 'crypto-js';
 import fs from 'fs';
 import path from 'path';
+import readline from 'readline';
+import { URL } from 'url';
+
+// =================================
+// 常量配置
+// =================================
 
 // AES + RSA 加密参数
 const pubKey = '010001';
@@ -10,6 +16,10 @@ const modulus =
   '00e0b509f6259df8642dbc35662901477df22677ec152b5ff68ace615bb7b725152b3ab17a876aea8a5aa76d2e417629ec4ee341f56135fccf695280104e0312ecbda92557c93870114af6c9d05c4f7f0c3685b7a46bee255932575cce10b424d813cfe4875d3e82047b97ddef52741d546b8e289dc6935b3ece0462db0a22b8e7'; // 网易云 weapi 公共 modulus
 const nonce = '0CoJUm6Qyw8W8jud';
 const iv = '0102030405060708';
+
+// =================================
+// 加密工具函数
+// =================================
 
 // 随机生成 16 位字符串
 function randomString(len) {
@@ -51,6 +61,51 @@ function weapi(data) {
   return { params: encText, encSecKey };
 }
 
+// =================================
+// URL 解析工具
+// =================================
+
+// 从网易云音乐链接中提取歌曲ID
+function extractSongIdFromUrl(urlString) {
+  try {
+    // 处理各种可能的URL格式
+    let cleanUrl = urlString.trim();
+
+    // 移除可能的锚点标记
+    if (cleanUrl.includes('#/')) {
+      cleanUrl = cleanUrl.replace('#/', '');
+    }
+
+    const url = new URL(cleanUrl);
+
+    // 从URL参数中获取id
+    const songId = url.searchParams.get('id');
+
+    if (!songId) {
+      throw new Error('无法从URL中提取歌曲ID');
+    }
+
+    return parseInt(songId, 10);
+  } catch (error) {
+    // 尝试用正则表达式匹配
+    const match = urlString.match(/[?&]id=(\d+)/);
+    if (match) {
+      return parseInt(match[1], 10);
+    }
+
+    throw new Error(`无效的网易云音乐链接: ${error.message}`);
+  }
+}
+
+// 验证是否为网易云音乐链接
+function isNetEaseMusicUrl(urlString) {
+  return urlString.includes('music.163.com') && urlString.includes('song');
+}
+
+// =================================
+// 网易云音乐 API 接口
+// =================================
+
 // 调用歌词接口
 async function getLyric(songId) {
   const { params, encSecKey } = weapi({ id: songId, lv: -1, tv: -1 });
@@ -66,9 +121,10 @@ async function getLyric(songId) {
         },
       },
     );
-    console.log(res.data);
+    return res.data;
   } catch (err) {
-    console.error('请求失败:', err.message);
+    console.error('获取歌词失败:', err.message);
+    throw err;
   }
 }
 
@@ -116,7 +172,7 @@ async function getSongUrl(songId, br = 320000) {
     ids: [songId],
     br: br, // 比特率：128000, 192000, 320000, 999000
   });
-  
+
   try {
     const res = await axios.post(
       'https://music.163.com/weapi/song/enhance/player/url?csrf_token=',
@@ -196,11 +252,23 @@ async function downloadCover(coverUrl, fileName = 'cover.jpg', outputDir = './co
   }
 }
 
+// =================================
+// 文件工具函数
+// =================================
+
 // 从完整URL中提取文件扩展名
 function getFileExtension(url) {
   const urlWithoutParams = url.split('?')[0];
   const extension = path.extname(urlWithoutParams);
   return extension || '.jpg';
+}
+
+// 生成安全的文件名
+function generateSafeFileName(name, artist, maxLength = 50) {
+  return `${name}_${artist}`
+    .replace(/[^\w\s-]/g, '') // 移除特殊字符
+    .replace(/\s+/g, '_') // 空格替换为下划线
+    .substring(0, maxLength); // 限制长度
 }
 
 // 下载歌曲音频文件
@@ -218,8 +286,8 @@ async function downloadSong(songUrl, fileName, outputDir = './songs') {
       responseType: 'stream',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': 'https://music.163.com/',
-        'Range': 'bytes=0-', // 支持断点续传
+        Referer: 'https://music.163.com/',
+        Range: 'bytes=0-', // 支持断点续传
       },
     });
 
@@ -237,7 +305,9 @@ async function downloadSong(songUrl, fileName, outputDir = './songs') {
       downloadedSize += chunk.length;
       if (totalSize) {
         const progress = ((downloadedSize / totalSize) * 100).toFixed(1);
-        process.stdout.write(`\r下载进度: ${progress}% (${(downloadedSize / 1024 / 1024).toFixed(2)}MB / ${(totalSize / 1024 / 1024).toFixed(2)}MB)`);
+        process.stdout.write(
+          `\r下载进度: ${progress}% (${(downloadedSize / 1024 / 1024).toFixed(2)}MB / ${(totalSize / 1024 / 1024).toFixed(2)}MB)`,
+        );
       }
     });
 
@@ -275,10 +345,7 @@ async function downloadCoverBySongId(songId, outputDir = './covers') {
     console.log(`- 封面URL: ${songDetail.coverUrl}`);
 
     // 生成文件名
-    const safeFileName = `${songDetail.name}_${songDetail.artist}`
-      .replace(/[^\w\s-]/g, '') // 移除特殊字符
-      .replace(/\s+/g, '_') // 空格替换为下划线
-      .substring(0, 50); // 限制长度
+    const safeFileName = generateSafeFileName(songDetail.name, songDetail.artist);
 
     const extension = getFileExtension(songDetail.coverUrl);
     const fileName = `${safeFileName}${extension}`;
@@ -318,10 +385,7 @@ async function downloadSongBySongId(songId, br = 320000, outputDir = './songs') 
     console.log(`- 文件类型: ${songUrlData.type}`);
 
     // 生成安全的文件名
-    const safeFileName = `${songDetail.name}_${songDetail.artist}`
-      .replace(/[^\w\s-]/g, '') // 移除特殊字符
-      .replace(/\s+/g, '_') // 空格替换为下划线
-      .substring(0, 50); // 限制长度
+    const safeFileName = generateSafeFileName(songDetail.name, songDetail.artist);
 
     const fileName = `${safeFileName}.${songUrlData.type}`;
 
@@ -342,7 +406,12 @@ async function downloadSongBySongId(songId, br = 320000, outputDir = './songs') 
 }
 
 // 通过歌曲ID同时下载歌曲和封面
-async function downloadSongAndCover(songId, br = 320000, songsDir = './songs', coversDir = './covers') {
+async function downloadSongAndCover(
+  songId,
+  br = 320000,
+  songsDir = './songs',
+  coversDir = './covers',
+) {
   try {
     console.log(`开始下载歌曲 ${songId} 及其封面...`);
 
@@ -366,61 +435,173 @@ async function downloadSongAndCover(songId, br = 320000, songsDir = './songs', c
   }
 }
 
-// 测试封面下载
-async function testCoverDownload() {
-  const coverUrl =
-    'https://p2.music.126.net/fCCGwFeGnEgbuKJLVxLReQ==/109951169513382012.jpg';
-  const extension = getFileExtension(coverUrl);
-  const fileName = `cover_${Date.now()}${extension}`;
+// =================================
+// 命令行交互界面
+// =================================
 
+// 创建readline接口
+function createReadlineInterface() {
+  return readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+}
+
+// 显示欢迎信息
+function showWelcome() {
+  console.log('\n=================================');
+  console.log('🎵 网易云音乐下载工具');
+  console.log('=================================');
+  console.log('支持功能:');
+  console.log('• 通过网易云音乐链接下载歌曲和封面');
+  console.log('• 支持多种音质选择');
+  console.log('• 自动生成安全文件名');
+  console.log('=================================\n');
+}
+
+// 显示菜单
+function showMenu() {
+  console.log('\n请选择操作:');
+  console.log('1. 下载歌曲和封面');
+  console.log('2. 仅下载歌曲');
+  console.log('3. 仅下载封面');
+  console.log('4. 获取歌词');
+  console.log('5. 退出');
+  console.log('=================================');
+}
+
+// 获取用户输入
+function askQuestion(rl, question) {
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      resolve(answer.trim());
+    });
+  });
+}
+
+// 处理URL输入并执行相应操作
+async function handleUserInput(rl, choice) {
   try {
-    await downloadCover(coverUrl, fileName);
+    const urlInput = await askQuestion(rl, '\n请输入网易云音乐歌曲链接: ');
+
+    if (!urlInput) {
+      console.log('❌ 链接不能为空!');
+      return;
+    }
+
+    if (!isNetEaseMusicUrl(urlInput)) {
+      console.log('❌ 请输入有效的网易云音乐歌曲链接!');
+      return;
+    }
+
+    const songId = extractSongIdFromUrl(urlInput);
+    console.log(`\n✅ 解析到歌曲ID: ${songId}`);
+
+    let br = 320000; // 默认音质
+
+    if (choice === '1' || choice === '2') {
+      const brInput = await askQuestion(rl, '\n请选择音质 (128/192/320/999, 默认320): ');
+      if (brInput) {
+        const brMap = {
+          128: 128000,
+          192: 192000,
+          320: 320000,
+          999: 999000,
+        };
+        br = brMap[brInput] || 320000;
+      }
+    }
+
+    console.log('\n🚀 开始处理...');
+
+    switch (choice) {
+      case '1':
+        await downloadSongAndCover(songId, br);
+        break;
+      case '2':
+        await downloadSongBySongId(songId, br);
+        break;
+      case '3':
+        await downloadCoverBySongId(songId);
+        break;
+      case '4':
+        const lyricData = await getLyric(songId);
+        console.log('\n📝 歌词信息:');
+        console.log(JSON.stringify(lyricData, null, 2));
+        break;
+      default:
+        console.log('❌ 无效的选择!');
+        return;
+    }
+
+    console.log('\n✅ 操作完成!');
   } catch (error) {
-    console.error('测试下载失败:', error);
+    console.error('\n❌ 操作失败:', error.message);
   }
 }
 
-// 测试通过歌曲ID下载封面
-async function testDownloadBySongId() {
-  const songId = 2147712523; // 测试歌曲ID
+// 主函数 - 命令行交互
+async function main() {
+  const rl = createReadlineInterface();
+
+  showWelcome();
 
   try {
-    const result = await downloadCoverBySongId(songId);
-    console.log('下载完成!');
-    console.log(`文件路径: ${result.filePath}`);
+    while (true) {
+      showMenu();
+      const choice = await askQuestion(rl, '请输入选项 (1-5): ');
+
+      if (choice === '5') {
+        console.log('\n👋 感谢使用，再见!');
+        break;
+      }
+
+      if (!['1', '2', '3', '4'].includes(choice)) {
+        console.log('❌ 无效的选择，请输入 1-5 之间的数字!');
+        continue;
+      }
+
+      await handleUserInput(rl, choice);
+
+      const continueChoice = await askQuestion(rl, '\n是否继续操作? (y/n): ');
+      if (
+        continueChoice.toLowerCase() !== 'y' &&
+        continueChoice.toLowerCase() !== 'yes'
+      ) {
+        console.log('\n👋 感谢使用，再见!');
+        break;
+      }
+    }
   } catch (error) {
-    console.error('测试失败:', error);
+    console.error('程序运行出错:', error.message);
+  } finally {
+    rl.close();
   }
 }
 
-// 测试歌曲下载
-async function testSongDownload() {
-  const songId = 2147712523; // 测试歌曲ID
-  
-  try {
-    const result = await downloadSongBySongId(songId);
-    console.log('歌曲下载完成!');
-    console.log(`文件路径: ${result.filePath}`);
-  } catch (error) {
-    console.error('歌曲下载测试失败:', error);
-  }
-}
+// =================================
+// 测试函数 (开发用)
+// =================================
 
-// 测试同时下载歌曲和封面
-async function testDownloadAll() {
-  const songId = 2147712523; // 测试歌曲ID
-  
+// 快速测试函数
+async function quickTest() {
+  const testUrl = 'https://music.163.com/#/song?id=2147712523&userid=320620245';
+
   try {
+    console.log('🧪 开始快速测试...');
+    const songId = extractSongIdFromUrl(testUrl);
+    console.log(`✅ 解析歌曲ID: ${songId}`);
+
     const result = await downloadSongAndCover(songId);
-    console.log('全部下载完成!');
+    console.log('✅ 测试完成!');
   } catch (error) {
-    console.error('下载测试失败:', error);
+    console.error('❌ 测试失败:', error.message);
   }
 }
 
-// 测试
-// getLyric(2147712523); // 替换成你想抓的歌曲ID
-// testCoverDownload(); // 测试封面下载
-// testDownloadBySongId(); // 测试通过歌曲ID下载封面
-// testSongDownload(); // 测试歌曲下载
-testDownloadAll(); // 测试同时下载歌曲和封面
+// 启动程序
+if (process.argv[2] === '--test') {
+  quickTest();
+} else {
+  main();
+}

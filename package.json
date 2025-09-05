@@ -2,6 +2,7 @@
   "name": "audiary",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -9,7 +10,8 @@
     "lint": "pnpm run lint:eslint && pnpm run lint:prettier",
     "lint:eslint": "pnpm exec eslint .",
     "lint:prettier": "pnpm exec prettier . --check",
-    "format": "pnpm exec prettier . --write"
+    "format": "pnpm exec prettier . --write",
+    "download-music": "node script/song.js"
   },
   "dependencies": {
     "@types/colorthief": "^2.6.0",
