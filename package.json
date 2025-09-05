@@ -2,6 +2,7 @@
   "name": "audiary",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -9,11 +10,15 @@
     "lint": "pnpm run lint:eslint && pnpm run lint:prettier",
     "lint:eslint": "pnpm exec eslint .",
     "lint:prettier": "pnpm exec prettier . --check",
-    "format": "pnpm exec prettier . --write"
+    "format": "pnpm exec prettier . --write",
+    "download-music": "node script/song.js"
   },
   "dependencies": {
     "@types/colorthief": "^2.6.0",
+    "axios": "^1.11.0",
+    "big-integer": "^1.6.52",
     "colorthief": "^2.6.0",
+    "crypto-js": "^4.2.0",
     "lucide-react": "^0.536.0",
     "next": "15.4.5",
     "react": "19.1.0",
