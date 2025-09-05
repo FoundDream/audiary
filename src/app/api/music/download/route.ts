@@ -187,6 +187,11 @@ export async function POST(request: NextRequest) {
           const songUrlData = await getSongUrl(songId, quality || 320000);
           console.log('Got song URL:', songUrlData.url, 'size:', songUrlData.size);
 
+          // 检查URL是否有效
+          if (!songUrlData.url) {
+            throw new Error('获取歌曲下载链接失败：URL为空');
+          }
+
           console.log('Downloading file buffer...');
           const fileBuffer = await downloadFileToBuffer(songUrlData.url);
           console.log('Downloaded buffer size:', fileBuffer.length);
@@ -203,10 +208,16 @@ export async function POST(request: NextRequest) {
           });
         } catch (error) {
           console.error('下载歌曲失败:', error);
+          const errorDetails = {
+            message: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+            name: error instanceof Error ? error.name : undefined,
+          };
+          console.error('Error details:', errorDetails);
           return NextResponse.json(
             {
               error: '下载歌曲失败',
-              details: error instanceof Error ? error.message : String(error),
+              details: errorDetails,
             },
             { status: 500 },
           );
