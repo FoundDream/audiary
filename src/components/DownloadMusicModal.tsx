@@ -99,8 +99,7 @@ export default function DownloadMusicModal({ isOpen, onClose }: DownloadMusicMod
       const url = new URL(cleanUrl);
       const songId = url.searchParams.get('id');
       return songId ? parseInt(songId, 10) : null;
-    } catch (error) {
-      console.error(error);
+    } catch {
       const match = urlString.match(/[?&]id=(\d+)/);
       return match ? parseInt(match[1], 10) : null;
     }
@@ -414,6 +413,8 @@ export default function DownloadMusicModal({ isOpen, onClose }: DownloadMusicMod
                 <img
                   src={songDetail.coverUrl}
                   alt={songDetail.name}
+                  width={64}
+                  height={64}
                   className="w-16 h-16 object-cover"
                 />
                 <div className="flex-1">

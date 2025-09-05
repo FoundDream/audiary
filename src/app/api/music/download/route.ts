@@ -183,7 +183,7 @@ export async function POST(request: NextRequest) {
           const fileBuffer = await downloadFileToBuffer(songUrlData.url);
           const fileName = `${safeFileName}.${songUrlData.type}`;
 
-          return new NextResponse(fileBuffer, {
+          return new NextResponse(fileBuffer as BodyInit, {
             headers: {
               'Content-Type': 'audio/mpeg',
               'Content-Disposition': `attachment; filename="${encodeURIComponent(fileName)}"`,
@@ -201,7 +201,7 @@ export async function POST(request: NextRequest) {
           const fileBuffer = await downloadFileToBuffer(songDetail.coverUrl);
           const fileName = `${safeFileName}.jpg`;
 
-          return new NextResponse(fileBuffer, {
+          return new NextResponse(fileBuffer as BodyInit, {
             headers: {
               'Content-Type': 'image/jpeg',
               'Content-Disposition': `attachment; filename="${encodeURIComponent(fileName)}"`,
@@ -221,7 +221,7 @@ export async function POST(request: NextRequest) {
           const fileName = `${safeFileName}_lyrics.json`;
           const buffer = Buffer.from(lyricsContent, 'utf-8');
 
-          return new NextResponse(buffer, {
+          return new NextResponse(buffer as BodyInit, {
             headers: {
               'Content-Type': 'application/json',
               'Content-Disposition': `attachment; filename="${encodeURIComponent(fileName)}"`,
