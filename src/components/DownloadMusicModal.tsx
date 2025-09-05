@@ -165,9 +165,22 @@ export default function DownloadMusicModal({ isOpen, onClose }: DownloadMusicMod
         }),
       });
 
-      if (!response.ok) {
-        throw new Error(`下载${fileName}失败`);
+          if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Download error response:', errorText);
+      let errorMessage = `下载${fileName}失败`;
+      try {
+        const errorData = JSON.parse(errorText);
+        if (errorData.details) {
+          console.error('Error details:', errorData.details);
+          errorMessage += `: ${errorData.details.message || errorData.details}`;
+        }
+      } catch (e) {
+        console.error('Failed to parse error response:', e);
+        errorMessage += `: ${errorText}`;
       }
+      throw new Error(errorMessage);
+    }
 
       // 创建下载链接
       const blob = await response.blob();
